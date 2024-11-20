@@ -43,7 +43,7 @@ model Word {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  
+
   videoId             String?
   userId              String
 
