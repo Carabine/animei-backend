@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @unique @default(uuid())
+  email         String         @unique
+  password      String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+  words         Word[]
+}
+
+model RefreshToken {
+  id          String   @id @unique @default(uuid())
+  hashedToken String
+  userId      String
+  revoked     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  User        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Word {
+  id                  String   @id @unique @default(uuid())
+  kanji               String
+  kana                String
+  romaji              String
+  translation         String
+  sentence            String
+  sentenceTranslation String
+  videoStart          Int
+  videoEnd            Int
+  hint                String
+  userId              String
+  videoId             String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  Video               Video    @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  User                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Video {
+  id              String   @id @unique @default(uuid())
+  url             String
+  animelonVideoId String   @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  words           Word[]
+}
