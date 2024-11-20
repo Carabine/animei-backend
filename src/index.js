@@ -19,12 +19,10 @@ const userAgent = require('user-agents');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
-const { translateText, translateDocs } = require('puppeteer-google-translate');
 const { analyze, tokenize, wakati} = require("@enjoyjs/node-mecab")
 const morgan = require('morgan');
 const helmet = require('helmet');
 const { db } = require('./utils/db');
-const asyncHandler = require('express-async-handler')
 
 const middlewares = require('./middlewares');
 const api = require('./api');
@@ -87,69 +85,69 @@ function checkExistsWithTimeout(filePath, timeout) {
 }
 
 
-const downloadVideo = async (url) => {
-  // Launch a headless browser
-  console.log("URL", url)
-  //const {origin} = await axios.get("https://httpbin.org/ip")
-
-  const userAgent = 'Mozilla/5.0 (X11; Linux x86_64)' +
-    'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.39 Safari/537.36';
-
-  //const browser = await puppeteer.launch({headless:false, args: [`--proxy-server=${origin}`],});
-  const browser = await puppeteer.launch({headless: true, ignoreDefaultArgs: ['--enable-automation']});
-
-  // Open a new page
-  const page = await browser.newPage();
-  await page.setUserAgent(userAgent);
-
-  //await page.setUserAgent("Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1; .NET CLR 1.1.4322)")
-
-
-  // Set a destination path for your downloaded video
-  const downloadPath = path.resolve(__dirname, 'storage');
-  fs.mkdirSync(downloadPath, { recursive: true });
-
-  await page._client.send('Page.setDownloadBehavior', {
-    behavior: 'allow',
-    downloadPath: downloadPath,
-  });
-
-  // Navigate to the video
-  await page.goto(url, { waitUntil: 'load' });
-
-  // This assumes you know the direct URL to the video file
-  // Sometimes you might need to extract this from a video tag or a dynamically generated source
-  const videoUrl = url;
-  console.log("URL2", url)
-
-  // Trigger download - this part depends heavily on how the website provides the video
-  // This example assumes you have a direct URL
-  const { fileName, fileType } = await page.evaluate(() => {
-    const el = document.querySelector('video');
-    const { src, type } = el.querySelector('source');
-
-    // filename from src attribute
-    const fileUrl = new URL(src);
-    const fileName = fileUrl.pathname.substring(fileUrl.pathname.lastIndexOf('/') + 1);
-
-    const downloadLink = document.createElement('a');
-    downloadLink.innerText = 'Download Video';
-    downloadLink.href = src;
-    downloadLink.download = fileName;
-
-    document.querySelector('body').appendChild(downloadLink);
-
-    return { fileName, fileType: type.split('/')[1] };
-  });
-
-  await page.click(`[download="${fileName}"]`);
-
-  //const res = await checkExistsWithTimeout(`/Users/dwhite/Downloads/${fileName}.${fileType}`, 30000);
-
-  await browser.close();
-
-  console.log('Download completed!');
-};
+// const downloadVideo = async (url) => {
+//   // Launch a headless browser
+//   console.log("URL", url)
+//   //const {origin} = await axios.get("https://httpbin.org/ip")
+//
+//   const userAgent = 'Mozilla/5.0 (X11; Linux x86_64)' +
+//     'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.39 Safari/537.36';
+//
+//   //const browser = await puppeteer.launch({headless:false, args: [`--proxy-server=${origin}`],});
+//   const browser = await puppeteer.launch({headless: true, ignoreDefaultArgs: ['--enable-automation']});
+//
+//   // Open a new page
+//   const page = await browser.newPage();
+//   await page.setUserAgent(userAgent);
+//
+//   //await page.setUserAgent("Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1; .NET CLR 1.1.4322)")
+//
+//
+//   // Set a destination path for your downloaded video
+//   const downloadPath = path.resolve(__dirname, 'storage');
+//   fs.mkdirSync(downloadPath, { recursive: true });
+//
+//   await page._client.send('Page.setDownloadBehavior', {
+//     behavior: 'allow',
+//     downloadPath: downloadPath,
+//   });
+//
+//   // Navigate to the video
+//   await page.goto(url, { waitUntil: 'load' });
+//
+//   // This assumes you know the direct URL to the video file
+//   // Sometimes you might need to extract this from a video tag or a dynamically generated source
+//   const videoUrl = url;
+//   console.log("URL2", url)
+//
+//   // Trigger download - this part depends heavily on how the website provides the video
+//   // This example assumes you have a direct URL
+//   const { fileName, fileType } = await page.evaluate(() => {
+//     const el = document.querySelector('video');
+//     const { src, type } = el.querySelector('source');
+//
+//     // filename from src attribute
+//     const fileUrl = new URL(src);
+//     const fileName = fileUrl.pathname.substring(fileUrl.pathname.lastIndexOf('/') + 1);
+//
+//     const downloadLink = document.createElement('a');
+//     downloadLink.innerText = 'Download Video';
+//     downloadLink.href = src;
+//     downloadLink.download = fileName;
+//
+//     document.querySelector('body').appendChild(downloadLink);
+//
+//     return { fileName, fileType: type.split('/')[1] };
+//   });
+//
+//   await page.click(`[download="${fileName}"]`);
+//
+//   //const res = await checkExistsWithTimeout(`/Users/dwhite/Downloads/${fileName}.${fileType}`, 30000);
+//
+//   await browser.close();
+//
+//   console.log('Download completed!');
+// };
 
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 
@@ -157,7 +155,7 @@ const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 const translate = async (text) => {
   console.log("URL", text)
 
-  const browser = await puppeteer.launch({headless: true, ignoreDefaultArgs: ['--enable-automation']});
+  const browser = await puppeteer.launch({headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']});
 
   const page = await browser.newPage();
   await page.setUserAgent(userAgent.toString())
@@ -202,7 +200,7 @@ app.post('/fetch-video', async (req, res) => {
     // webmReadable.push(data);
     // const outputWebmStream = fs.createWriteStream('./storage/bunny.mp4');
     // webmReadable.pipe(outputWebmStream);
-    await downloadVideo(videoUrl)
+    //await downloadVideo(videoUrl)
     res.send({})
   } catch(err) {
     console.log(err)
@@ -527,7 +525,7 @@ app.use(middlewares.errorHandler);
 
 const getVideoUrlFromAnimelonPage = async (videoId) => {
 
-  const browser = await puppeteer.launch({headless: true, ignoreDefaultArgs: ['--enable-automation']});
+  const browser = await puppeteer.launch({headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']});
 
   const page = await browser.newPage();
 
