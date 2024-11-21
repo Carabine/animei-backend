@@ -602,7 +602,7 @@ const refreshAnimelonVideos = async () => {
   const videos = await db.video.findMany({
     where: {
       updatedAt: {
-        lt: new Date(Date.now() - 15 * 60 * 1000)
+        lt: new Date(Date.now() - 10 * 60 * 1000)
       }
     },
   })
