@@ -418,6 +418,27 @@ app.get("/words", isAuthenticated, async (req, res) => {
   }
 })
 
+app.get("/words/test", async (req, res) => {
+  try {
+    const data = await db.word.findMany({
+      where: {
+        userId: 'ea4fca80-f7c5-400c-a159-32343c966f9f'
+      },
+      include: {
+        Video: true
+      },
+    });
+
+    res.json({data})
+  } catch(err) {
+    console.log(err)
+    res.status(err.code || 500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+})
+
 app.delete("/words/:id", isAuthenticated, async (req, res) => {
   const { userId } = req.payload;
   const { id: wordId } = req.params
