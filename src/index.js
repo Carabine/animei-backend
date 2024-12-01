@@ -8,6 +8,7 @@ const bodyParser = require('body-parser')
 const cors = require("cors")
 const fs = require("fs")
 const { Readable } = require('stream');
+const request = require('request');
 //const puppeteer = require("puppeteer")
 const path = require("path")
 const { ImgurClient } = require('imgur');
@@ -23,6 +24,9 @@ const { analyze, tokenize, wakati} = require("@enjoyjs/node-mecab")
 const morgan = require('morgan');
 const helmet = require('helmet');
 const { db } = require('./utils/db');
+const { connect } =  require( 'puppeteer-real-browser')
+
+globalThis.fetch = fetch;
 
 const middlewares = require('./middlewares');
 const api = require('./api');
@@ -533,6 +537,88 @@ app.post("/words/import", isAuthenticated, async (req, res) => {
   }
 })
 
+app.use((req, res, next) => {
+  res.set({
+    'Access-Control-Allow-Origin': 'http://localhost:8080', // Allow your app's origin
+    'Access-Control-Allow-Methods': 'GET, OPTIONS', // Allow necessary methods
+    'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept', // Allow these headers
+    'Access-Control-Allow-Credentials': 'true', // Allow cookies if necessary
+    'Cross-Origin-Resource-Policy': 'cross-origin', // Allow cross-origin resource access
+  });
+  next();
+});
+
+app.get('/proxy', (req, res) => {
+
+  //const fileUrl = 'https://drive.google.com/uc?export=download&id=11ca1x_2lQqdJJy6qX7lDWKHMoJjpZ0gR';
+  const videoUrl = 'https://r2---sn-5hne6nz6.googlevideo.com/videoplayback?expire=1733044850&ei=Ug5MZ832ErfRi9oPwYGO2Ao&ip=194.26.192.161&id=746dd56006bf3d07&itag=18&source=picasa_otf&begin=0&requiressl=yes&xpc=EghoqJzIP3oBAQ==&met=1733037650,&mh=pD&mm=32&mn=sn-5hne6nz6&ms=su&mv=u&mvi=2&pl=24&rms=su,su&sc=yes&susc=ph&app=fife&ic=388&eaua=54KnF9cyMFk&pcm2=yes&mime=video/mp4&vprv=1&prv=1&rqh=1&otf=1&otfp=1&dur=0.000&lmt=1555553321497306&mt=1733036971&sparams=expire,ei,ip,id,itag,source,requiressl,xpc,susc,app,ic,eaua,pcm2,mime,vprv,prv,rqh,otf,otfp,dur,lmt&sig=AJfQdSswRgIhAN58P48OpNKnCj1kGHhOPlRAx61d_UpFLisoT11mAlYvAiEAq_tXSPaBFKDxtkX1W_18DLOGTt66SKt3LGPuTG-KyTQ=&lsparams=met,mh,mm,mn,ms,mv,mvi,pl,rms,sc&lsig=AGluJ3MwRQIhALRzR3t8vjbFNKXz3DuQbJMuk7UC0CgDipDvB7Vh1ZqvAiBxM9rUqS8YQ8YLEA0QGIsvNNY6zYtXwsOWzaPWFgdnLg=='
+  const headers = {
+    'accept': '*/*',
+    'accept-encoding': 'identity;q=1, *;q=0',
+    'accept-language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+    'range': 'bytes=0-',
+    'referer': 'https://r4---sn-c0q7lnz7.googlevideo.com', // Adjust as needed
+    'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Windows"',
+    'sec-fetch-dest': 'video',
+    'sec-fetch-mode': 'no-cors',
+    'sec-fetch-site': 'same-origin',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    //'x-client-data': 'CJG2yQEIpLbJAQipncoBCMzqygEIlqHLAQiFoM0BCLjIzQEI/qXOAQj+yc4BCNLNzgEI0s7OAQjHz84BCPXPzgEIrdDOAQiz084BCMnUzgEY9cnNAQ==',
+  };
+
+  request({ url: videoUrl,
+    headers,
+    followAllRedirects: true })
+      .on('response', (response) => {
+        console.log('hey?')
+        const contentType = response.headers['content-type'] || 'application/octet-stream';
+        console.log('Response Headers:', response.headers);
+
+        // Set appropriate headers for video streaming
+        res.set({
+          'Content-Type': contentType,   // Set correct content type
+          'Accept-Ranges': 'bytes',      // Enable byte-range requests
+          'Cache-Control': 'no-cache',   // Disable caching for streaming
+          'Cross-Origin-Resource-Policy': 'cross-origin', // Allow cross-origin resource access
+        });
+
+        console.log('Content-Type:', contentType);
+
+        const videoSize = parseInt(response.headers['content-length'], 10);
+
+        // Log the content length (video size)
+        console.log('Video Size:', videoSize);
+
+        // Check for valid content length or ranges
+        if (req.headers.range) {
+          const range = req.headers.range;
+          const parts = range.replace(/bytes=/, "").split("-");
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : videoSize - 1;
+          const chunkSize = (end - start) + 1;
+
+          res.status(206); // Partial content response for range requests
+          res.set({
+            'Content-Range': `bytes ${start}-${end}/${videoSize}`,
+            'Content-Length': chunkSize,
+          });
+
+          response.pipe(res, { end: false });
+
+          response.once('end', () => res.end()); // Close the response after stream ends
+        } else {
+          console.log("SEND FULL", res)
+          response.pipe(res);
+        }
+      })
+      .on('error', (err) => {
+        console.error('Error fetching video:', err);
+        res.status(500).send('Error fetching video');
+      });
+});
+
 process.on('uncaughtException', (err) => {
   console.error('Unhandled Error:', err);
 });
@@ -544,43 +630,83 @@ process.on('unhandledRejection', (err) => {
 app.use(middlewares.notFound);
 app.use(middlewares.errorHandler);
 
+// const getVideoUrlFromAnimelonPageOld = async (videoId) => {
+//   const browser = await puppeteer.launch({headless: false, args: [
+//       `--ignore-certificate-errors`,
+//       `--no-sandbox`,
+//       `--disable-setuid-sandbox`,
+//       '--proxy-server=http://193.123.244.193:8080'
+//     ], ignoreDefaultArgs: ['--enable-automation']});
+//
+//   const page = await browser.newPage();
+//
+//   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36');
+//
+//   // Add the missing headers (sec-ch-ua, sec-ch-ua-mobile, sec-ch-ua-platform, x-client-data)
+//   // await page.setExtraHTTPHeaders({
+//   //   'sec-ch-ua': '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
+//   //   'sec-ch-ua-mobile': '?0',
+//   //   'sec-ch-ua-platform': '"Windows"',
+//   //   'x-client-data': 'CJG2yQEIpLbJAQipncoBCMzqygEIlqHLAQiFoM0BCLjIzQEI9c/OARj1yc0B', // Optional, but can help
+//   //   'accept': '*/*',
+//   //   'accept-encoding': 'identity;q=1, *;q=0',
+//   //   'accept-language': 'en-US,en;q=0.9',
+//   //   'range': 'bytes=0-', // Optional, if needed for partial content requests
+//   //   'referer': 'https://animelon.com/',
+//   //   'sec-fetch-dest': 'video',
+//   //   'sec-fetch-mode': 'no-cors',
+//   //   'sec-fetch-site': 'cross-site'
+//   // });
+//
+//   return new Promise((resolve, reject) => {
+//     page.on('response', async (response) => {
+//       const prefixes = ['https://r4---', 'https://r1---', 'https://r2--', 'https://r3---', 'https://r5---'];
+//       const urls = []
+//       setTimeout(() => resolve(urls), 20000)
+//       if(prefixes.some(prefix => response._request._url.includes(prefix)))
+//         console.log(response._request)
+//       if (prefixes.some(prefix => response._request._url.includes(prefix)) && (response._status === 206 || response._status === 302)) {
+//         urls.push(response._request._url)
+//       }
+//     });
+//
+//     page.goto(`https://animelon.com/video/${videoId}`, { waitUntil: 'load' }).catch(reject);
+//   });
+// }
+
 const getVideoUrlFromAnimelonPage = async (videoId) => {
-
-  const browser = await puppeteer.launch({headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox']});
-
-  const page = await browser.newPage();
-
-  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36');
-
-  // Add the missing headers (sec-ch-ua, sec-ch-ua-mobile, sec-ch-ua-platform, x-client-data)
-  await page.setExtraHTTPHeaders({
-    'sec-ch-ua': '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
-    'sec-ch-ua-mobile': '?0',
-    'sec-ch-ua-platform': '"Windows"',
-    'x-client-data': 'CJG2yQEIpLbJAQipncoBCMzqygEIk6HLAQiFoM0BCLjIzQEIz8fOAQj1z84BGPXJzQE=', // Optional, but can help
-    'accept': '*/*',
-    'accept-encoding': 'identity;q=1, *;q=0',
-    'accept-language': 'en-US,en;q=0.9',
-    'if-range':'Wed, 30 Oct 2019 06:22:15 GMT',
-    'priority': 'i',
-    'range': 'bytes=0-', // Optional, if needed for partial content requests
-    'referer': 'https://animelon.com/',
-    'sec-fetch-dest': 'video',
-    'sec-fetch-mode': 'no-cors',
-    'sec-fetch-site': 'cross-site'
+  const { page } = await connect({
+    headless: false,
+    fingerprint: true,
+    turnstile: true,
   });
 
-  return new Promise((resolve, reject) => {
+  const data = await new Promise((resolve, reject) => {
+    const urls = []
+
+    setTimeout(async () => {
+      resolve(urls)
+    }, 10000)
+
     page.on('response', async (response) => {
       const prefixes = ['https://r4---', 'https://r1---', 'https://r2--', 'https://r3---', 'https://r5---'];
 
-      if (prefixes.some(prefix => response._request._url.includes(prefix)) && (response._status === 206 || response._status === 302)) {
-        resolve(response._request._url);
+      console.log(response.url())
+      if(prefixes.some(prefix => response.url().includes(prefix))) {
+        console.log(response.url(), response.status())
+      }
+      if (prefixes.some(prefix => response.url().includes(prefix)) && (response.status() === 206 || response.status() === 302)) {
+        urls.push(response.url())
+        resolve(urls)
+        //resolve(response.url())
       }
     });
 
     page.goto(`https://animelon.com/video/${videoId}`, { waitUntil: 'load' }).catch(reject);
-  });
+  })
+
+  await page.close();
+  return data.length ? data[0] : ''
 }
 
 const updateVideo = async (video) => {
@@ -616,7 +742,9 @@ const refreshAnimelonVideos = async () => {
   refreshAnimelonVideos()
 }
 
-const startCRUD = () => {
+
+
+const startCRUD = async () => {
   refreshAnimelonVideos()
 }
 
