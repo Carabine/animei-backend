@@ -695,7 +695,7 @@ const getVideoUrlFromAnimelonPage = async (videoId) => {
       }
       if (prefixes.some(prefix => response.url().includes(prefix)) && (response.status() === 206 || response.status() === 302)) {
         urls.push(response.url())
-        resolve(urls)
+        //resolve(urls)
         //resolve(response.url())
       }
     });
