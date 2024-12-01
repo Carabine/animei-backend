@@ -691,9 +691,7 @@ const getVideoUrlFromAnimelonPage = async (videoId) => {
     page.on('response', async (response) => {
       const prefixes = ['https://r4---', 'https://r1---', 'https://r2--', 'https://r3---', 'https://r5---'];
 
-      console.log(response.url())
       if(prefixes.some(prefix => response.url().includes(prefix))) {
-        console.log(response.url(), response.status())
       }
       if (prefixes.some(prefix => response.url().includes(prefix)) && (response.status() === 206 || response.status() === 302)) {
         urls.push(response.url())
@@ -706,6 +704,7 @@ const getVideoUrlFromAnimelonPage = async (videoId) => {
   })
 
   await page.close();
+  console.log(data)
   return data.length ? data[0] : ''
 }
 
