@@ -711,6 +711,7 @@ const getVideoUrlFromAnimelonPage = async (videoId) => {
 
 const updateVideo = async (video) => {
   const newVideoUrl = await getVideoUrlFromAnimelonPage(video.animelonVideoId)
+  console.log("NEW VIDEO URL: ", newVideoUrl)
 
   if(newVideoUrl) {
     await db.video.update({
