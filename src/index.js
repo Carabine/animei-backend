@@ -679,6 +679,7 @@ const getVideoUrlFromAnimelonPage = async (videoId) => {
     headless: false,
     fingerprint: true,
     turnstile: true,
+    executablePath: process.env.CHROME_PATH
   });
 
   const data = await new Promise((resolve, reject) => {
@@ -686,7 +687,7 @@ const getVideoUrlFromAnimelonPage = async (videoId) => {
 
     setTimeout(async () => {
       resolve(urls)
-    }, 10000)
+    }, 15000)
 
     page.on('response', async (response) => {
       const prefixes = ['https://r4---', 'https://r1---', 'https://r2--', 'https://r3---', 'https://r5---'];
