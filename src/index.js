@@ -675,6 +675,7 @@ app.use(middlewares.errorHandler);
 // }
 
 const getVideoUrlFromAnimelonPage = async (videoId) => {
+  console.log(process.env.CHROME_PATH)
   const { page } = await connect({
     headless: false,
     fingerprint: true,
