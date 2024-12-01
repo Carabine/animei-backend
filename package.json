@@ -6,7 +6,7 @@
     "test": "mocha --exit",
     "start:pm2": "pm2 start src/index.js --name animei",
     "stop:pm2": "pm2 delete animei",
-    "reload:pm2": "pm2 delete animei && pm2 start src/index.js --name animei"
+    "restart:pm2": "pm2 delete animei && pm2 start src/index.js --name animei"
   },
   "dependencies": {
     "@enjoyjs/node-mecab": "^0.5.0",
