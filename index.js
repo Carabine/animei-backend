@@ -373,7 +373,7 @@ const getProxyUrls = async () => {
       axios.get('https://httpbin.dev/ip',  {
         httpsAgent: proxyAgent
       }).then((response) => {
-        console.log(proxyUrl)
+        console.log(proxyUrl, response.data)
         proxyUrls.push(proxyUrl)
       }).catch(() => null)
     }
