@@ -1,4 +1,7 @@
-const {isAuthenticated} = require("./middlewares")
+const { isAuthenticated } = require("./src/middlewares")
+const middlewares = require('./src/middlewares');
+const { db } = require('./src/utils/db');
+const api = require('./src/api');
 
 const express = require('express');
 const axios = require("axios")
@@ -23,13 +26,10 @@ puppeteer.use(StealthPlugin());
 const { analyze, tokenize, wakati} = require("@enjoyjs/node-mecab")
 const morgan = require('morgan');
 const helmet = require('helmet');
-const { db } = require('./utils/db');
-const { connect } =  require( 'puppeteer-real-browser')
+const { connect } =  require('puppeteer-real-browser')
 
 globalThis.fetch = fetch;
 
-const middlewares = require('./middlewares');
-const api = require('./api');
 
 const client = new ImgurClient({ clientId: process.env.CLIENT_ID });
 
@@ -354,26 +354,17 @@ app.post("/translate", async (req, res) => {
 app.post("/words", isAuthenticated, async (req, res) => {
   const { userId } = req.payload;
 
-  const {kanji, kana, romaji, translation, sentence, sentenceTranslation, videoStart, videoEnd, animelonVideoId, videoUrl, hint} = req.body
+  const {kanji, kana, romaji, translation, sentence, sentenceTranslation, videoStart, videoEnd, videoUrl, hint} = req.body
 
   try {
-    let video = await db.video.findFirst({
-      where: {
-        animelonVideoId
-      },
+    const video = await db.video.create({
+      data: {
+
+      }
     })
 
-    if(!video) {
-      video = await db.video.create({
-        data: {
-          animelonVideoId,
-          url: videoUrl
-        },
-      })
-    }
 
-
-    const data = await db.word.create({
+    const word = await db.word.create({
       data: {
         kanji,
         kana,
@@ -389,7 +380,35 @@ app.post("/words", isAuthenticated, async (req, res) => {
       },
     });
 
-    res.json({data})
+    res.json({data: word})
+
+    const proxyVideoUrl = `${process.env.API_URL ?? 'https://animei.space'}/proxy/video/${encodeURIComponent(videoUrl)}`
+
+    try {
+      const videoPath = await saveVideoFragment(proxyVideoUrl, video.id, videoStart, videoEnd - videoStart)
+      const response = await client.upload({
+        image: fs.createReadStream(videoPath),
+        type: 'stream',
+      });
+
+      console.log(response)
+
+      fs.unlink(videoPath, () => console.log("Deleted: " + videoPath))
+
+      const updated = await db.video.update({
+        where: {
+          id: video.id
+        },
+        data: {
+          url: response.data.link,
+          wordId: word.id
+        }
+      })
+      console.log(updated)
+    } catch(err) {
+      console.log("Error while creating video")
+      console.log(err)
+    }
   } catch(err) {
     console.log(err)
     res.status(err.code || 500).json({
@@ -425,9 +444,6 @@ app.get("/words", isAuthenticated, async (req, res) => {
 app.get("/words/test", async (req, res) => {
   try {
     const data = await db.word.findMany({
-      where: {
-        userId: 'ea4fca80-f7c5-400c-a159-32343c966f9f'
-      },
       include: {
         Video: true
       },
@@ -537,27 +553,38 @@ app.post("/words/import", isAuthenticated, async (req, res) => {
   }
 })
 
-app.use((req, res, next) => {
-  res.set({
-    'Access-Control-Allow-Origin': 'http://localhost:8080', // Allow your app's origin
-    'Access-Control-Allow-Methods': 'GET, OPTIONS', // Allow necessary methods
-    'Access-Control-Allow-Headers': 'Origin, Content-Type, Accept', // Allow these headers
-    'Access-Control-Allow-Credentials': 'true', // Allow cookies if necessary
-    'Cross-Origin-Resource-Policy': 'cross-origin', // Allow cross-origin resource access
-  });
-  next();
-});
+const saveVideoFragment = async (videoUrl, videoOutName, startTime, duration) => {
+  return new Promise((resolve, reject) => {
+    const outPath = path.resolve(__dirname, 'storage', videoOutName + ".mp4")
 
-app.get('/proxy', (req, res) => {
+    ffmpeg(videoUrl)
+        .setStartTime(startTime)
+        .setDuration(duration)
+        .output(outPath)
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .on('end', () => {
+          resolve(outPath)
+          console.log('Processing finished!')
+        })
+        .on('error', (err) => {
+          reject(err)
+          console.log('Error:', err)
+        })
+        .run()
+  })
+}
 
-  //const fileUrl = 'https://drive.google.com/uc?export=download&id=11ca1x_2lQqdJJy6qX7lDWKHMoJjpZ0gR';
-  const videoUrl = 'https://r2---sn-5hne6nz6.googlevideo.com/videoplayback?expire=1733044850&ei=Ug5MZ832ErfRi9oPwYGO2Ao&ip=194.26.192.161&id=746dd56006bf3d07&itag=18&source=picasa_otf&begin=0&requiressl=yes&xpc=EghoqJzIP3oBAQ==&met=1733037650,&mh=pD&mm=32&mn=sn-5hne6nz6&ms=su&mv=u&mvi=2&pl=24&rms=su,su&sc=yes&susc=ph&app=fife&ic=388&eaua=54KnF9cyMFk&pcm2=yes&mime=video/mp4&vprv=1&prv=1&rqh=1&otf=1&otfp=1&dur=0.000&lmt=1555553321497306&mt=1733036971&sparams=expire,ei,ip,id,itag,source,requiressl,xpc,susc,app,ic,eaua,pcm2,mime,vprv,prv,rqh,otf,otfp,dur,lmt&sig=AJfQdSswRgIhAN58P48OpNKnCj1kGHhOPlRAx61d_UpFLisoT11mAlYvAiEAq_tXSPaBFKDxtkX1W_18DLOGTt66SKt3LGPuTG-KyTQ=&lsparams=met,mh,mm,mn,ms,mv,mvi,pl,rms,sc&lsig=AGluJ3MwRQIhALRzR3t8vjbFNKXz3DuQbJMuk7UC0CgDipDvB7Vh1ZqvAiBxM9rUqS8YQ8YLEA0QGIsvNNY6zYtXwsOWzaPWFgdnLg=='
+app.get('/proxy/video/:url', async (req, res) => {
+  const videoUrl = decodeURIComponent(req.params.url)
+  const parsedUrl = new URL(videoUrl);
+  console.log(videoUrl, parsedUrl.origin)
   const headers = {
+    'range': req.headers.range,
     'accept': '*/*',
     'accept-encoding': 'identity;q=1, *;q=0',
     'accept-language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-    'range': 'bytes=0-',
-    'referer': 'https://r4---sn-c0q7lnz7.googlevideo.com', // Adjust as needed
+    'referer': parsedUrl.origin,
     'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
     'sec-ch-ua-mobile': '?0',
     'sec-ch-ua-platform': '"Windows"',
@@ -565,57 +592,46 @@ app.get('/proxy', (req, res) => {
     'sec-fetch-mode': 'no-cors',
     'sec-fetch-site': 'same-origin',
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    //'x-client-data': 'CJG2yQEIpLbJAQipncoBCMzqygEIlqHLAQiFoM0BCLjIzQEI/qXOAQj+yc4BCNLNzgEI0s7OAQjHz84BCPXPzgEIrdDOAQiz084BCMnUzgEY9cnNAQ==',
+    'accept-ranges': 'bytes',
   };
 
   request({ url: videoUrl,
     headers,
     followAllRedirects: true })
       .on('response', (response) => {
-        console.log('hey?')
         const contentType = response.headers['content-type'] || 'application/octet-stream';
-        console.log('Response Headers:', response.headers);
 
-        // Set appropriate headers for video streaming
         res.set({
-          'Content-Type': contentType,   // Set correct content type
-          'Accept-Ranges': 'bytes',      // Enable byte-range requests
-          'Cache-Control': 'no-cache',   // Disable caching for streaming
-          'Cross-Origin-Resource-Policy': 'cross-origin', // Allow cross-origin resource access
+          'Content-Type': contentType,
+          'Accept-Ranges': 'bytes',
+          'Cache-Control': 'no-cache',
+          'Cross-Origin-Resource-Policy': 'cross-origin',
         });
+        const videoSize = parseInt(response.headers['content-length'], 10)
 
-        console.log('Content-Type:', contentType);
-
-        const videoSize = parseInt(response.headers['content-length'], 10);
-
-        // Log the content length (video size)
-        console.log('Video Size:', videoSize);
-
-        // Check for valid content length or ranges
         if (req.headers.range) {
-          const range = req.headers.range;
-          const parts = range.replace(/bytes=/, "").split("-");
-          const start = parseInt(parts[0], 10);
-          const end = parts[1] ? parseInt(parts[1], 10) : videoSize - 1;
-          const chunkSize = (end - start) + 1;
+          const range = req.headers.range
+          const parts = range.replace(/bytes=/, "").split("-")
+          const start = parseInt(parts[0], 10)
+          const end = parts[1] ? parseInt(parts[1], 10) : videoSize - 1
+          const chunkSize = (end - start) + 1
 
-          res.status(206); // Partial content response for range requests
+          res.status(206);
           res.set({
             'Content-Range': `bytes ${start}-${end}/${videoSize}`,
             'Content-Length': chunkSize,
           });
 
-          response.pipe(res, { end: false });
+          response.pipe(res, { end: false })
 
-          response.once('end', () => res.end()); // Close the response after stream ends
+          response.once('end', () => res.end())
         } else {
-          console.log("SEND FULL", res)
-          response.pipe(res);
+          response.pipe(res)
         }
       })
       .on('error', (err) => {
-        console.error('Error fetching video:', err);
-        res.status(500).send('Error fetching video');
+        console.error('Error fetching video:', err)
+        res.status(500).send('Error fetching video')
       });
 });
 
@@ -680,7 +696,7 @@ const getVideoUrlFromAnimelonPage = async (videoId) => {
     headless: false,
     fingerprint: true,
     turnstile: true,
-    executablePath: process.env.CHROME_PATH
+    ignoreAllFlags: true
   });
 
   const data = await new Promise((resolve, reject) => {
@@ -688,7 +704,7 @@ const getVideoUrlFromAnimelonPage = async (videoId) => {
 
     setTimeout(async () => {
       resolve(urls)
-    }, 15000)
+    }, 20000)
 
     page.on('response', async (response) => {
       const prefixes = ['https://r4---', 'https://r1---', 'https://r2--', 'https://r3---', 'https://r5---'];
@@ -752,5 +768,5 @@ const startCRUD = async () => {
 
 app.listen(process.env.PORT, async () => {
   console.log('Server is listening on port ' + process.env.PORT);
-  startCRUD()
+  //startCRUD()
 });

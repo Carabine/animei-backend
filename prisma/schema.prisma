@@ -44,19 +44,19 @@ model Word {
   updatedAt           DateTime @updatedAt
 
 
-  videoId             String?
+  videoId             String?  @unique
   userId              String
 
-  Video               Video?    @relation(fields: [videoId], references: [id], onDelete: SetNull)
+  Video               Video?   @relation(fields: [videoId], references: [id], onDelete: SetNull)
   User                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Video {
   id              String   @id @unique @default(uuid())
-  url             String
-  animelonVideoId String   @unique
+  url             String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  words           Word[]
+  wordId          String?  @unique
+  word            Word?
 }
