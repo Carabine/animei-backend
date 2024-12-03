@@ -4,9 +4,9 @@
     "dev": "nodemon src/index.js",
     "lint": "eslint --fix src",
     "test": "mocha --exit",
-    "start:pm2": "pm2 start \"xvfb-run -a node src/index.js\" --name animei",
+    "start:pm2": "pm2 start index.js --name animei",
     "stop:pm2": "pm2 delete animei",
-    "restart:pm2": "pm2 delete animei && pm2 start \"xvfb-run -a node src/index.js\" --name animei"
+    "restart:pm2": "pm2 delete animei || pm2 start index.js --name animei"
   },
   "dependencies": {
     "@enjoyjs/node-mecab": "^0.5.0",
