@@ -1,3 +1,5 @@
+const https = require("https")
+
 const { isAuthenticated } = require("./src/middlewares")
 const middlewares = require('./src/middlewares');
 const { db } = require('./src/utils/db');
@@ -5,6 +7,7 @@ const api = require('./src/api');
 
 const express = require('express');
 const axios = require("axios")
+const FormData = require('form-data');
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 require('dotenv').config()
 const bodyParser = require('body-parser')
@@ -27,9 +30,10 @@ const { analyze, tokenize, wakati} = require("@enjoyjs/node-mecab")
 const morgan = require('morgan');
 const helmet = require('helmet');
 const { connect } =  require('puppeteer-real-browser')
+const HttpsProxyAgent = require('https-proxy-agent');
+const SocksProxyAgent = require('socks-proxy-agent');
 
 globalThis.fetch = fetch;
-
 
 const client = new ImgurClient({ clientId: process.env.CLIENT_ID });
 
@@ -351,6 +355,32 @@ app.post("/translate", async (req, res) => {
   res.json({data: results})
 })
 
+const getProxyUrls = async () => {
+  const { data } = await axios.get('https://advanced.name/freeproxy/674ec6170747c?type=http')
+  const ips = data.split('\r\n').slice(0,20)
+
+  const proxyUrls = []
+
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      resolve(proxyUrls)
+    }, 20000)
+    for(const ip of ips) {
+      const proxyUrl = 'http://' + ip
+
+      const proxyAgent = new HttpsProxyAgent.HttpsProxyAgent(proxyUrl);
+
+      axios.get('https://httpbin.dev/ip',  {
+        httpsAgent: proxyAgent
+      }).then((response) => {
+        console.log(proxyUrl)
+        proxyUrls.push(proxyUrl)
+      }).catch(() => null)
+    }
+  })
+
+}
+
 app.post("/words", isAuthenticated, async (req, res) => {
   const { userId } = req.payload;
 
@@ -386,12 +416,41 @@ app.post("/words", isAuthenticated, async (req, res) => {
 
     try {
       const videoPath = await saveVideoFragment(proxyVideoUrl, video.id, videoStart, videoEnd - videoStart)
-      const response = await client.upload({
-        image: fs.createReadStream(videoPath),
-        type: 'stream',
+      // const response = await client.upload({
+      //   image: fs.createReadStream(videoPath),
+      //   type: 'stream',
+      // });
+
+      const formData = new FormData();
+      formData.append('video', fs.createReadStream(videoPath)); // Attach video file
+
+
+      const proxyUrls = await getProxyUrls()
+
+      console.log(proxyUrls)
+
+      const proxyAgent = new HttpsProxyAgent.HttpsProxyAgent(proxyUrls[0]);
+
+      // // const resp = await axios.get('https://httpbin.dev/ip',  {
+      // //   proxy: {
+      //       ip:
+      // // })
+      // //console.log(resp)
+
+      const response = await axios.post('https://api.imgur.com/3/upload', formData, {
+        headers: {
+          ...formData.getHeaders(),
+          Authorization: `Client-ID ${process.env.CLIENT_ID}`,
+        },
+        httpsAgent: proxyAgent
       });
 
-      console.log(response)
+
+      if (response.data.success) {
+        console.log('Video uploaded successfully:', response.data.data.link);
+      } else {
+        console.error('Failed to upload video:', response.data);
+      }
 
       fs.unlink(videoPath, () => console.log("Deleted: " + videoPath))
 
@@ -400,7 +459,7 @@ app.post("/words", isAuthenticated, async (req, res) => {
           id: video.id
         },
         data: {
-          url: response.data.link,
+          url: response.data.data.link,
           wordId: word.id
         }
       })
