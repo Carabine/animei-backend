@@ -431,7 +431,10 @@ const uploadVideoToImgur = (videoPath) => {
         console.log(err.code)
         if(retries >= 3) {
           reject()
+          return
         }
+        console.log("RETRY")
+        fetchImgur()
       }
     }
     fetchImgur()
