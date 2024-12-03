@@ -318,7 +318,6 @@ app.get("/translate/:text", async (req, res) => {
 })
 
 app.post("/analyze", async (req, res) => {
-  console.log(req.body)
   const {text} = req.body
   let results = []
   
@@ -355,30 +354,53 @@ app.post("/translate", async (req, res) => {
   res.json({data: results})
 })
 
+function shuffle(array) {
+  let currentIndex = array.length;
+
+  while (currentIndex != 0) {
+
+    let randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+
+    [array[currentIndex], array[randomIndex]] = [
+      array[randomIndex], array[currentIndex]];
+  }
+  return array
+}
+
+
 const getProxyUrls = async () => {
-  const { data } = await axios.get('https://advanced.name/freeproxy/674ec6170747c?type=http')
-  const ips = data.split('\r\n').slice(0,20)
+  const { data } = await axios.get('https://advanced.name/freeproxy/674ec6170747c?type=socks5')
+  const ips = shuffle(data.split('\r\n').slice(0, 70)).slice(0, 40)
 
   const proxyUrls = []
+  const controllers = []
 
   return new Promise((resolve, reject) => {
     setTimeout(() => {
-      resolve(proxyUrls)
-    }, 20000)
-    for(const ip of ips) {
-      const proxyUrl = 'http://' + ip
+      resolve(proxyUrls);
+      controllers.forEach(controller => controller.abort())
+    }, 3000);
 
-      const proxyAgent = new HttpsProxyAgent.HttpsProxyAgent(proxyUrl);
+    for (const ip of ips) {
+      const proxyUrl = 'socks5://' + ip
+      const controller = new AbortController()
+      controllers.push(controller);
 
-      axios.get('https://httpbin.dev/ip',  {
-        httpsAgent: proxyAgent
-      }).then((response) => {
-        console.log(proxyUrl, response.data)
-        proxyUrls.push(proxyUrl)
-      }).catch(() => null)
+      const proxyAgent = new SocksProxyAgent.SocksProxyAgent(proxyUrl)
+
+      axios
+        .get('https://httpbin.dev/ip', {
+          httpsAgent: proxyAgent,
+          signal: controller.signal,
+        })
+        .then(response => {
+          console.log(proxyUrl, response.data)
+          proxyUrls.push(proxyUrl)
+        })
+        .catch(err => null)
     }
   })
-
 }
 
 app.post("/words", isAuthenticated, async (req, res) => {
@@ -422,14 +444,15 @@ app.post("/words", isAuthenticated, async (req, res) => {
       // });
 
       const formData = new FormData();
-      formData.append('video', fs.createReadStream(videoPath)); // Attach video file
+      formData.append('video', fs.createReadStream(videoPath))
 
 
       const proxyUrls = await getProxyUrls()
 
       console.log(proxyUrls)
 
-      const proxyAgent = new HttpsProxyAgent.HttpsProxyAgent(proxyUrls[0]);
+      const proxyUrl = proxyUrls[0]
+
 
       // // const resp = await axios.get('https://httpbin.dev/ip',  {
       // //   proxy: {
@@ -437,20 +460,25 @@ app.post("/words", isAuthenticated, async (req, res) => {
       // // })
       // //console.log(resp)
 
-      const response = await axios.post('https://api.imgur.com/3/upload', formData, {
+      //for(const proxyUrl of proxyUrls.slice(0,1)) {
+      const proxyAgent = new SocksProxyAgent.SocksProxyAgent(proxyUrls[0])
+
+      const imgurResponse = await axios.post('https://api.imgur.com/3/upload', formData, {
         headers: {
           ...formData.getHeaders(),
           Authorization: `Client-ID ${process.env.CLIENT_ID}`,
         },
         httpsAgent: proxyAgent
-      });
+      })
 
+      console.log("IMGUR: ", proxyUrl, imgurResponse)
+      
+      // if (imgurResponse.data.success) {
+      //   console.log('Video uploaded successfully:', imgurResponse.data.data.link);
+      // } else {
+      //   console.error('Failed to upload video:', imgurResponse.data);
+      // }
 
-      if (response.data.success) {
-        console.log('Video uploaded successfully:', response.data.data.link);
-      } else {
-        console.error('Failed to upload video:', response.data);
-      }
 
       fs.unlink(videoPath, () => console.log("Deleted: " + videoPath))
 
@@ -459,7 +487,7 @@ app.post("/words", isAuthenticated, async (req, res) => {
           id: video.id
         },
         data: {
-          url: response.data.data.link,
+          url: imgurResponse.data.data.link,
           wordId: word.id
         }
       })
