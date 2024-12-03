@@ -1,5 +1,3 @@
-const https = require("https")
-
 const { isAuthenticated } = require("./src/middlewares")
 const middlewares = require('./src/middlewares');
 const { db } = require('./src/utils/db');
@@ -403,6 +401,43 @@ const getProxyUrls = async () => {
   })
 }
 
+const uploadVideoToImgur = (videoPath) => {
+  return new Promise(async (resolve, reject) => {
+    let retries = 0
+
+    const fetchImgur = async () => {
+      retries++
+      const formData = new FormData();
+      formData.append('video', fs.createReadStream(videoPath))
+
+      const proxyUrls = await getProxyUrls()
+      const proxyUrl = proxyUrls[0]
+
+      console.log(proxyUrls)
+
+      const proxyAgent = new SocksProxyAgent.SocksProxyAgent(proxyUrl)
+
+      try {
+        const imgurResponse = await axios.post('https://api.imgur.com/3/upload', formData, {
+          headers: {
+            ...formData.getHeaders(),
+            Authorization: `Client-ID ${process.env.CLIENT_ID}`,
+          },
+          httpsAgent: proxyAgent
+        })
+        console.log(proxyUrl, imgurResponse.data)
+        resolve(imgurResponse.data)
+      } catch(err){
+        console.log(err.code)
+        if(retries >= 3) {
+          reject()
+        }
+      }
+    }
+    fetchImgur()
+  })
+}
+
 app.post("/words", isAuthenticated, async (req, res) => {
   const { userId } = req.payload;
 
@@ -435,44 +470,15 @@ app.post("/words", isAuthenticated, async (req, res) => {
     res.json({data: word})
 
     const proxyVideoUrl = `${process.env.API_URL ?? 'https://animei.space'}/proxy/video/${encodeURIComponent(videoUrl)}`
-
+    let videoPath = ''
     try {
-      const videoPath = await saveVideoFragment(proxyVideoUrl, video.id, videoStart, videoEnd - videoStart)
+      videoPath = await saveVideoFragment(proxyVideoUrl, video.id, videoStart, videoEnd - videoStart)
       // const response = await client.upload({
       //   image: fs.createReadStream(videoPath),
       //   type: 'stream',
       // });
+      const imgurData = await uploadVideoToImgur(videoPath)
 
-      const formData = new FormData();
-      formData.append('video', fs.createReadStream(videoPath))
-
-
-      const proxyUrls = await getProxyUrls()
-
-      console.log(proxyUrls)
-
-      const proxyUrl = proxyUrls[0]
-
-
-      // // const resp = await axios.get('https://httpbin.dev/ip',  {
-      // //   proxy: {
-      //       ip:
-      // // })
-      // //console.log(resp)
-
-      //for(const proxyUrl of proxyUrls.slice(0,1)) {
-      const proxyAgent = new SocksProxyAgent.SocksProxyAgent(proxyUrls[0])
-
-      const imgurResponse = await axios.post('https://api.imgur.com/3/upload', formData, {
-        headers: {
-          ...formData.getHeaders(),
-          Authorization: `Client-ID ${process.env.CLIENT_ID}`,
-        },
-        httpsAgent: proxyAgent
-      })
-
-      console.log("IMGUR: ", proxyUrl, imgurResponse)
-      
       // if (imgurResponse.data.success) {
       //   console.log('Video uploaded successfully:', imgurResponse.data.data.link);
       // } else {
@@ -487,12 +493,13 @@ app.post("/words", isAuthenticated, async (req, res) => {
           id: video.id
         },
         data: {
-          url: imgurResponse.data.data.link,
+          url: imgurData.data.link,
           wordId: word.id
         }
       })
       console.log(updated)
     } catch(err) {
+      fs.unlink(videoPath, () => console.log("Deleted: " + videoPath))
       console.log("Error while creating video")
       console.log(err)
     }
