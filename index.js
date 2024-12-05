@@ -378,7 +378,7 @@ const getProxyUrls = async () => {
     setTimeout(() => {
       resolve(proxyUrls);
       controllers.forEach(controller => controller.abort())
-    }, 3000);
+    }, 5000);
 
     for (const ip of ips) {
       const proxyUrl = 'socks5://' + ip
@@ -415,10 +415,11 @@ const uploadVideoToImgur = (videoPath) => {
       const proxyUrl = randomizedProxyUrls[0]
 
       console.log(proxyUrls)
-
-      const proxyAgent = new SocksProxyAgent.SocksProxyAgent(proxyUrl)
-
       try {
+        if(!proxyUrl) throw new Error("No proxy available")
+
+        const proxyAgent = new SocksProxyAgent.SocksProxyAgent(proxyUrl)
+
         const imgurResponse = await axios.post('https://api.imgur.com/3/upload', formData, {
           headers: {
             ...formData.getHeaders(),
