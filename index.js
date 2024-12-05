@@ -411,7 +411,8 @@ const uploadVideoToImgur = (videoPath) => {
       formData.append('video', fs.createReadStream(videoPath))
 
       const proxyUrls = await getProxyUrls()
-      const proxyUrl = proxyUrls[0]
+      const randomizedProxyUrls = shuffle(proxyUrls)
+      const proxyUrl = randomizedProxyUrls[0]
 
       console.log(proxyUrls)
 
