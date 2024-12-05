@@ -368,7 +368,7 @@ function shuffle(array) {
 
 
 const getProxyUrls = async () => {
-  const { data } = await axios.get('https://advanced.name/freeproxy/674ec6170747c?type=socks5')
+  const { data } = await axios.get('https://advanced.name/freeproxy/6751a6b8b54da?type=socks5')
   const ips = shuffle(data.split('\r\n').slice(0, 200)).slice(0, 60)
 
   const proxyUrls = []
