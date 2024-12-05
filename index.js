@@ -369,7 +369,7 @@ function shuffle(array) {
 
 const getProxyUrls = async () => {
   const { data } = await axios.get('https://advanced.name/freeproxy/674ec6170747c?type=socks5')
-  const ips = shuffle(data.split('\r\n').slice(0, 100)).slice(0, 40)
+  const ips = shuffle(data.split('\r\n').slice(0, 200)).slice(0, 60)
 
   const proxyUrls = []
   const controllers = []
@@ -429,11 +429,12 @@ const uploadVideoToImgur = (videoPath) => {
         resolve(imgurResponse.data)
       } catch(err){
         console.log(err.code)
-        if(retries >= 6) {
+        if(retries >= 15) {
           reject()
           return
         }
         console.log("RETRY")
+        await sleep(3000)
         fetchImgur()
       }
     }
